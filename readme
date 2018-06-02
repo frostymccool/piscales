@@ -6,18 +6,18 @@ suggest put these couple entries into crontab, so as not to leave the bluetooth 
 so band the time period around where you likely want to measure.
 i.e in my case 5-12 will cover extremes and force the readings to only be allowed in the morning for consistancy
 
-/home/pi/smart-scale/piscales.sh restart
-/home/pi/smart-scale/piscales.sh stop
+/home/pi/piscales/piscales.sh restart
+/home/pi/piscales/piscales.sh stop
 
 Using keepalive as somewhere, maybe memory leak, after a time the process hangs
-@reboot /home/pi/smart-scale/piscales_keepalive.sh
-4 5 * * * /home/pi/smart-scale/piscales.sh restart
-*/11 5-12 * * * /home/pi/smart-scale/piscales_keepalive.sh
-4 13 * * * /home/pi/smart-scale/piscales.sh stop
+@reboot /home/pi/piscales/piscales_keepalive.sh
+4 5 * * * /home/pi/piscales/piscales.sh restart
+*/11 5-12 * * * /home/pi/piscales/piscales_keepalive.sh
+4 13 * * * /home/pi/piscales/piscales.sh stop
 
 Another option is to push this through periodically to make sure the service is always running and restart if any crashes etc.
 This example runs every ht
-# * */1 * * * /home/pi/smart-scale/piscales_keepalive.sh
+# * */1 * * * /home/pi/piscales/piscales_keepalive.sh
 
 All credits go for the main part of the code to
 https://github.com/initialstate/smart-scale/wiki/Part-1.-Equipment
