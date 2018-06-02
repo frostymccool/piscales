@@ -37,6 +37,7 @@ from PIL import ImageFont
 
 # for time display during idle
 from datetime import datetime
+from datetime import timedelta
 #import tzlocal # $ pip install tzlocal
 
 
@@ -163,8 +164,14 @@ class Wiiboard:
         if address is None:
             print "Non existant address"
             return
-        self.receivesocket.connect((address, 0x13))
-        self.controlsocket.connect((address, 0x11))
+        try:
+            self.receivesocket.connect((address, 0x13))
+            self.controlsocket.connect((address, 0x11))
+        except:
+            print "Could not connect to Wiiboard at address " + address
+#           self.term.println(":(")
+            raise ValueError("BT connect error, likely host is down")
+            
         if self.receivesocket and self.controlsocket:
             print "Connected to Wiiboard at address " + address
             self.status = "Connected"
@@ -202,7 +209,8 @@ class Wiiboard:
             print "Wiiboard connected"
         else:
             print "Could not connect to Wiiboard at address " + address
-            self.term.println("\rConnect\nerror")
+            self.term.println("\rConnect")
+            self.term.println("error")
 
     def receive(self):
         flushreceive = False
@@ -428,30 +436,9 @@ class Wiiboard:
     def wait(self, millis):
         time.sleep(millis / 1000.0)
 
-#OLED Font routine
-def make_font(name, size):
-    font_path = os.path.abspath(os.path.join(
-        os.path.dirname(__file__), 'fonts', name))
-    return ImageFont.truetype(font_path, size)
-
-def mainscales():
-    #setup local OLED screen
-    fontname = "ProggyTiny.ttf"
-    size = 48 # 48 gives 7chars x 2lines
-    font = make_font(fontname, size) if fontname else None
-    # if i2c then use i2c()
-    serial = spi(device=0, port=0) 
-    # change device type here if needed, this also rotates display 180 - i.e. if gpio connector on bottom of display
-    device = sh1106(serial, rotate=2) 
-    term = terminal(device, font)
-#    term.clear()
-    term.animate = True
-
-    processor = EventProcessor()
-    board = Wiiboard(processor,term)
-    
-#    address = None    
-    address = WIIBOARD1_MAC # imported from keys - blank out to use discovery
+def Discover(board):
+    address = None    
+#    address = WIIBOARD1_MAC # imported from keys - blank out to use discovery
     if ((len(sys.argv) == 1) and (address == None)) :
         print "Discovering board..."
         #term.puts("\rHunting........\r")
@@ -474,28 +461,88 @@ def mainscales():
 
     if address is None:
         print ("No address to connect to, bailing out")
-        time.sleep (2)
-        return
-    print "Trying to connect..."
-    term.animate = False
+#        time.sleep (2)
+        
+    return address
 
-    try:
-        board.connect(address)  # The wii board must be in sync mode at this time
-        board.wait(200)
-        board.setLight(False)
-        board.wait(500)
-        board.setLight(True)
-        # go weigh :)
-        board.receive()
-    except:
-        # likely no board connected, 
-        print "No board connected"
+#OLED Font routine
+def make_font(name, size):
+    font_path = os.path.abspath(os.path.join(
+        os.path.dirname(__file__), 'fonts', name))
+    return ImageFont.truetype(font_path, size)
 
-    # display time during this idle phase
-    now = datetime.now()
-    print now.strftime("%a,%d-%b %I:%M:%S")
-    term.puts(now.strftime("%a-%d\n%I:%M"))
-    term.flush()    
+# only displays / updates time if there's been at least a minute change 
+# so as not to unnecessarily refresh screen
+class DispTime:
+    def __init__(self,term):
+        self._now = datetime.now()
+        self._prevTime = datetime.min
+        self._screen = term
+    
+    def putToScreen(self):
+        # first check it a min has elapsed
+        # if so, the display
+        self._now = datetime.now()
+        secsdelta = (self._now-self._prevTime).seconds
+        
+        if (secsdelta>59):
+            print self._now.strftime("%a,%d-%b %I:%M:%S")
+            self._screen.puts(self._now.strftime("\n%a-%d\n%I:%M"))
+            self._screen.flush()
+            self._prevTime = self._now
+
+## Main
+def mainscales():
+    #setup local OLED screen
+    fontname = "ProggyTiny.ttf"
+    size = 48 # 48 gives 7chars x 2lines
+    font = make_font(fontname, size) if fontname else None
+    # if i2c then use i2c()
+    serial = spi(device=0, port=0) 
+    # change device type here if needed, this also rotates display 180 - i.e. if gpio connector on bottom of display
+    device = sh1106(serial, rotate=2) 
+    term = terminal(device, font)
+#    term.clear()
+    term.animate = True
+
+    processor = EventProcessor()
+    board = Wiiboard(processor,term)
+    dispTime = DispTime(term)
+    
+    while 1:
+        address = Discover(board)
+        didwegrabit = True
+
+        if (address != None):
+            print "Trying to connect..."
+            term.animate = False
+
+            try:
+                board.connect(address)  # The wii board must be in sync mode at this time
+                board.wait(200)
+                board.setLight(False)
+                board.wait(500)
+                board.setLight(True)
+                # go weigh :)
+                board.receive()
+            except KeyboardInterrupt:
+                #time.sleep(5)
+                exit()
+            except:
+                # likely no board connected, 
+                print "No board connected"
+                didwegrabit=False
+
+        # display time during this idle phase
+        dispTime.putToScreen()
+        
+        # need to sleep for a while to allow BT stack to not be hammered 
+        # and allow time for board to go into discover mode again
+        # if we have a good address, then discovery is quicker, so add a longer sleep
+        # if did have sucessfull weighing, then also can add longer sleep
+        time.sleep(3)
+        if (didwegrabit or (address!=None)):
+            time.sleep(3)
 
 def main():
     while 1:
@@ -512,4 +559,4 @@ def main():
         
 
 if __name__ == "__main__":
-    main()
+    mainscales()
