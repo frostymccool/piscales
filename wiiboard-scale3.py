@@ -35,6 +35,11 @@ from luma.core.virtual import terminal
 from PIL import ImageFont
 
 
+# for time display during idle
+from datetime import datetime
+#import tzlocal # $ pip install tzlocal
+
+
 #from __future__ import print_function
 
 # --------- User Settings ---------
@@ -43,6 +48,7 @@ MIN_WEIGHT_TO_POST = 130.0 #lbs - min value below which post wil not be sent to 
 # ---------------------------------
 
 # Wiiboard Parameters
+#WIIBOARD1_MAC = "00:1E:xx:xx:xx:xx" # imported from keys
 CONTINUOUS_REPORTING = "04"  # Easier as string with leading zero
 COMMAND_LIGHT = 11
 COMMAND_REPORTING = 12
@@ -59,7 +65,7 @@ TOP_LEFT = 2
 BOTTOM_LEFT = 3
 BLUETOOTH_NAME = "Nintendo RVL-WBC-01"
 #IFTTT
-#IFTTT_MAKER_KEY="your unique key from IFFT here"
+#IFTTT_MAKER_KEY="your unique key from IFFT here" imported from keys
 urlfront = 'https://maker.ifttt.com/trigger/' # add trigger string name here
 urlback = '/with/key/' + IFTTT_MAKER_KEY # Set destination URL here
 
@@ -164,10 +170,11 @@ class Wiiboard:
             self.status = "Connected"
             self.address = address
         
-            self.term.println("PiScales connected")
+#            self.term.println("PiScales connected")
+            self.term.println(":)")
             print "oldweight " + str(oldweight)
             if (oldweight>0.0):
-                self.term.println("last W: ".format(oldweight))
+                self.term.println("last W:".format(oldweight))
             
             #self.term.println("Wiiboard connected:\n{0} ".format(address));
         
@@ -177,7 +184,8 @@ class Wiiboard:
         
             # Add local screen write
             print "Place flat for calibration "
-            self.term.puts("Flat for calibration")
+#            self.term.puts("Flat for calibration")
+            self.term.puts("Cal")
             for mill in range(0, 10):
                 self.term.puts(".")
                 self.term.flush()
@@ -188,13 +196,13 @@ class Wiiboard:
             useExt = ["00", COMMAND_REGISTER, "04", "A4", "00", "40", "00"]
             self.send(useExt)
             self.setReportingType()
-            self.term.puts("\rCalibrated")
-            self.term.puts("\nStep onto the scales")
+#            self.term.puts("\rCalibrated")
+            self.term.puts("\nStep on"); #to the scales")
             self.term.flush()
             print "Wiiboard connected"
         else:
             print "Could not connect to Wiiboard at address " + address
-            self.term.println("\rError connecting")
+            self.term.println("\rConnect\nerror")
 
     def receive(self):
         flushreceive = False
@@ -226,7 +234,8 @@ class Wiiboard:
                     if (value>1):
                         # flash the wii fit board in case this is headless on completion of reading
                         print "final measured weight value"
-                        self.term.println("\rWeight:{0}lbs  ".format(value))
+                        self.term.puts("\rWeight:{0}lb".format(value))
+                        self.term.flush()
                         print "Weight: " + str(value) + " lbs"
                         oldweight = value
                         print "oldweight " + str(oldweight)
@@ -264,8 +273,8 @@ class Wiiboard:
 
                 if (self.buttonbeenreleased == True):
                     print "Bdown - disconnecting"
-                    self.term.println("\nShutting Down")
-                    self.term.println("Have a fun day..")
+#                    self.term.println("\nShutting Down")
+#                    self.term.println("Have a fun day..")
 
                     for x in xrange(16): #make sure even ending to keep light on
                         self.toggleLight()
@@ -303,7 +312,7 @@ class Wiiboard:
                 print "Found Wiiboard at address " + address
         if address is None:
             print "No Wiiboards discovered."
-            self.term.println("No Wiiboards found")
+#            self.term.println("No Wiiboards found")
         return address
 
     def createBoardEvent(self, bytes):
@@ -425,10 +434,10 @@ def make_font(name, size):
         os.path.dirname(__file__), 'fonts', name))
     return ImageFont.truetype(font_path, size)
 
-def main():
+def mainscales():
     #setup local OLED screen
     fontname = "ProggyTiny.ttf"
-    size = 16
+    size = 48 # 48 gives 7chars x 2lines
     font = make_font(fontname, size) if fontname else None
     # if i2c then use i2c()
     serial = spi(device=0, port=0) 
@@ -441,14 +450,15 @@ def main():
     processor = EventProcessor()
     board = Wiiboard(processor,term)
     
-    address = None
-    if len(sys.argv) == 1:
+#    address = None    
+    address = WIIBOARD1_MAC # imported from keys - blank out to use discovery
+    if ((len(sys.argv) == 1) and (address == None)) :
         print "Discovering board..."
         #term.puts("\rHunting........\r")
         #term.puts("\nPress the red button\n")
         #term.flush()
         address = board.discover()
-    else:
+    elif (address == None):
         address = sys.argv[1]
         #term.puts("\rConnecting known dev.\r")
         #term.puts("\nPress the red button\n")
@@ -468,19 +478,29 @@ def main():
         return
     print "Trying to connect..."
     term.animate = False
-    board.connect(address)  # The wii board must be in sync mode at this time
-    board.wait(200)
-    board.setLight(False)
-    board.wait(500)
-    board.setLight(True)
-    # go weigh :)
-    board.receive()
 
+    try:
+        board.connect(address)  # The wii board must be in sync mode at this time
+        board.wait(200)
+        board.setLight(False)
+        board.wait(500)
+        board.setLight(True)
+        # go weigh :)
+        board.receive()
+    except:
+        # likely no board connected, 
+        print "No board connected"
 
-if __name__ == "__main__":
+    # display time during this idle phase
+    now = datetime.now()
+    print now.strftime("%a,%d-%b %I:%M:%S")
+    term.puts(now.strftime("%a-%d\n%I:%M"))
+    term.flush()    
+
+def main():
     while 1:
         try:
-            main()
+            mainscales()
         except KeyboardInterrupt:
             #time.sleep(5)
             exit()
@@ -489,3 +509,7 @@ if __name__ == "__main__":
         # good to let sleep for a while - otherwise 2.4G band tended to get a little slammed
         time.sleep (5)
         print "trying again...."
+        
+
+if __name__ == "__main__":
+    main()
